@@ -199,6 +199,8 @@ app.Use(middlewares.AccessLogger(myLogger))
 
 This middleware create a session from cookie.
 
+**NOTE:** Cookie sessions must save manually after data changed!
+
 ```go
 // Signature:
 NewCookieSession(cache cache.Cache, secure bool, domain string, sameSite string, exp time.Duration) fiber.Handler

@@ -36,14 +36,14 @@ type cSession struct {
 	data map[string]any
 }
 
-func (this cSession) err(
+func (ses cSession) err(
 	pattern string,
 	params ...any,
 ) error {
 	return utils.TaggedError([]string{"CookieSession"}, pattern, params...)
 }
 
-func (this *cSession) init(
+func (ses *cSession) init(
 	cache cache.Cache,
 	ctx *fiber.Ctx,
 	secure bool,
@@ -53,142 +53,149 @@ func (this *cSession) init(
 	generator func() string,
 	name string,
 ) {
-	this.cache = cache
-	this.ctx = ctx
-	this.secure = secure
-	this.domain = domain
-	this.sameSite = sameSite
-	this.expiration = exp
-	this.generator = generator
-	this.name = name
-	if this.name == "" {
-		this.name = "session"
+	ses.cache = cache
+	ses.ctx = ctx
+	ses.secure = secure
+	ses.domain = domain
+	ses.sameSite = sameSite
+	ses.expiration = exp
+	ses.generator = generator
+	ses.name = name
+	if ses.name == "" {
+		ses.name = "session"
 	}
-	this.data = make(map[string]any)
+	ses.data = make(map[string]any)
 }
 
-func (this cSession) id() string {
-	return "C_S_" + this.key
+func (ses cSession) id() string {
+	return "C_S_" + ses.key
 }
 
-func (this cSession) ID() string {
-	return this.key
+func (ses cSession) ID() string {
+	return ses.key
 }
 
-func (this cSession) Context() *fiber.Ctx {
-	return this.ctx
+func (ses cSession) Context() *fiber.Ctx {
+	return ses.ctx
 }
 
-func (this *cSession) Parse() error {
-	this.key = this.ctx.Cookies(this.name)
+func (ses *cSession) Parse() error {
+	ses.key = ses.ctx.Cookies(ses.name)
 	exists := false
 	var err error
-	if this.key != "" {
-		exists, err = this.cache.Exists(this.id())
+	if ses.key != "" {
+		exists, err = ses.cache.Exists(ses.id())
 		if err != nil {
-			return this.err(err.Error())
+			return ses.err(err.Error())
 		}
 	}
 
 	if !exists {
-		return this.Regenerate()
+		return ses.Regenerate()
 	} else {
 		res := make(map[string]any)
-		caster, err := this.cache.Cast(this.id())
+		caster, err := ses.cache.Cast(ses.id())
 		if err != nil {
-			return this.err(err.Error())
+			return ses.err(err.Error())
 		}
 
 		str, err := caster.String()
 		if err != nil {
-			return this.err(err.Error())
+			return ses.err(err.Error())
 		}
 
 		err = json.Unmarshal([]byte(str), &res)
 		if err != nil {
-			return this.err(err.Error())
+			return ses.err(err.Error())
 		}
 
-		this.data = res
+		ses.data = res
 		return nil
 	}
 }
 
-func (this *cSession) Regenerate() error {
-	err := this.Destroy()
+func (ses *cSession) Regenerate() error {
+	err := ses.Destroy()
 	if err != nil {
 		return err
 	}
 
-	this.key = this.generator()
-	cookie := fiber.Cookie{}
-	cookie.Name = this.name
-	cookie.Value = this.key
-	cookie.Secure = this.secure
-	cookie.Domain = this.domain
-	cookie.SameSite = this.sameSite
-	if this.expiration > 0 {
-		cookie.Expires = time.Now().UTC().Add(this.expiration)
+	// generate session
+	ses.key = ses.generator()
+	ses.data["created_at"] = time.Now().UnixNano()
+	if err := ses.Save(); err != nil {
+		return err
 	}
-	this.ctx.Cookie(&cookie)
+
+	// create cookie
+	cookie := fiber.Cookie{}
+	cookie.Name = ses.name
+	cookie.Value = ses.key
+	cookie.Secure = ses.secure
+	cookie.Domain = ses.domain
+	cookie.SameSite = ses.sameSite
+	if ses.expiration > 0 {
+		cookie.Expires = time.Now().UTC().Add(ses.expiration)
+	}
+	ses.ctx.Cookie(&cookie)
 	return nil
 }
 
-func (this *cSession) Set(key string, value any) {
-	this.data[key] = value
+func (ses *cSession) Set(key string, value any) {
+	ses.data[key] = value
 }
 
-func (this cSession) Get(key string) any {
-	return this.data[key]
+func (ses cSession) Get(key string) any {
+	return ses.data[key]
 }
 
-func (this *cSession) Delete(key string) {
-	delete(this.data, key)
+func (ses *cSession) Delete(key string) {
+	delete(ses.data, key)
 }
 
-func (this cSession) Exists(key string) bool {
-	_, ok := this.data[key]
+func (ses cSession) Exists(key string) bool {
+	_, ok := ses.data[key]
 	return ok
 }
 
-func (this cSession) Cast(key string) caster.Caster {
-	return caster.NewCaster(this.data[key])
+func (ses cSession) Cast(key string) caster.Caster {
+	return caster.NewCaster(ses.data[key])
 }
 
-func (this *cSession) Destroy() error {
-	err := this.cache.Forget(this.id())
+func (ses *cSession) Destroy() error {
+	err := ses.cache.Forget(ses.id())
 	if err != nil {
-		return this.err(err.Error())
+		return ses.err(err.Error())
 	}
-	this.key = ""
-	this.data = make(map[string]any)
+	ses.key = ""
+	ses.data = make(map[string]any)
 	return nil
 }
 
-func (this cSession) Save() error {
-	if this.key == "" {
+func (ses cSession) Save() error {
+	if ses.key == "" {
 		return nil
 	}
 
-	data, err := json.Marshal(this.data)
+	data, err := json.Marshal(ses.data)
 	if err != nil {
-		return this.err(err.Error())
+		return ses.err(err.Error())
 	}
 
-	exists, err := this.cache.Set(this.id(), string(data))
+	exists, err := ses.cache.Set(ses.id(), string(data))
 	if err != nil {
-		return this.err(err.Error())
+		return ses.err(err.Error())
 	}
 
 	if !exists {
-		exp := this.expiration
+		exp := ses.expiration
 		if exp <= 0 {
 			exp = 24 * time.Hour
 		}
 
-		err = this.cache.Put(this.id(), string(data), exp)
+		err = ses.cache.Put(ses.id(), string(data), exp)
 		if err != nil {
-			return this.err(err.Error())
+			return ses.err(err.Error())
 		}
 	}
 	return nil

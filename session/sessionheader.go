@@ -27,86 +27,86 @@ type hSession struct {
 	data map[string]any
 }
 
-func (this hSession) err(
+func (ses hSession) err(
 	pattern string,
 	params ...any,
 ) error {
 	return utils.TaggedError([]string{"HeaderSession"}, pattern, params...)
 }
 
-func (this *hSession) init(
+func (ses *hSession) init(
 	cache cache.Cache,
 	ctx *fiber.Ctx,
 	exp time.Duration,
 	generator func() string,
 	name string,
 ) {
-	this.cache = cache
-	this.ctx = ctx
-	this.expiration = exp
-	this.generator = generator
-	this.name = name
-	if this.name == "" {
-		this.name = "X-SESSION-ID"
+	ses.cache = cache
+	ses.ctx = ctx
+	ses.expiration = exp
+	ses.generator = generator
+	ses.name = name
+	if ses.name == "" {
+		ses.name = "X-SESSION-ID"
 	}
-	this.data = make(map[string]any)
+	ses.data = make(map[string]any)
 }
 
-func (this hSession) id() string {
-	return "C_S_" + this.key
+func (ses hSession) id() string {
+	return "C_S_" + ses.key
 }
 
-func (this hSession) ID() string {
-	return this.key
+func (ses hSession) ID() string {
+	return ses.key
 }
 
-func (this hSession) Context() *fiber.Ctx {
-	return this.ctx
+func (ses hSession) Context() *fiber.Ctx {
+	return ses.ctx
 }
 
-func (this *hSession) Parse() error {
-	this.key = this.ctx.Get(this.name)
+func (ses *hSession) Parse() error {
+	ses.key = ses.ctx.Get(ses.name)
 	exists := false
 	var err error
-	if this.key != "" {
-		exists, err = this.cache.Exists(this.id())
+	if ses.key != "" {
+		exists, err = ses.cache.Exists(ses.id())
 		if err != nil {
-			return this.err(err.Error())
+			return ses.err(err.Error())
 		}
 	}
 
 	if !exists {
-		return this.Regenerate()
+		return ses.Regenerate()
 	} else {
 		res := make(map[string]any)
-		caster, err := this.cache.Cast(this.id())
+		caster, err := ses.cache.Cast(ses.id())
 		if err != nil {
-			return this.err(err.Error())
+			return ses.err(err.Error())
 		}
 
 		str, err := caster.String()
 		if err != nil {
-			return this.err(err.Error())
+			return ses.err(err.Error())
 		}
 
 		err = json.Unmarshal([]byte(str), &res)
 		if err != nil {
-			return this.err(err.Error())
+			return ses.err(err.Error())
 		}
 
-		this.data = res
+		ses.data = res
 		return nil
 	}
 }
 
-func (this *hSession) Regenerate() error {
-	err := this.Destroy()
+func (ses *hSession) Regenerate() error {
+	err := ses.Destroy()
 	if err != nil {
 		return err
 	}
 
-	this.key = this.generator()
-	this.ctx.Set(this.name, this.key)
+	ses.key = ses.generator()
+	ses.ctx.Set(ses.name, ses.key)
 	return nil
 }
 
@@ -114,57 +114,57 @@ func (s *hSession) Set(key string, value any) {
 	s.data[key] = value
 }
 
-func (this hSession) Get(key string) any {
-	return this.data[key]
+func (ses hSession) Get(key string) any {
+	return ses.data[key]
 }
 
-func (this *hSession) Delete(key string) {
-	delete(this.data, key)
+func (ses *hSession) Delete(key string) {
+	delete(ses.data, key)
 }
 
-func (this hSession) Exists(key string) bool {
-	_, ok := this.data[key]
+func (ses hSession) Exists(key string) bool {
+	_, ok := ses.data[key]
 	return ok
 }
 
-func (this hSession) Cast(key string) caster.Caster {
-	return caster.NewCaster(this.data[key])
+func (ses hSession) Cast(key string) caster.Caster {
+	return caster.NewCaster(ses.data[key])
 }
 
-func (this *hSession) Destroy() error {
-	err := this.cache.Forget(this.id())
+func (ses *hSession) Destroy() error {
+	err := ses.cache.Forget(ses.id())
 	if err != nil {
-		return this.err(err.Error())
+		return ses.err(err.Error())
 	}
-	this.key = ""
-	this.data = make(map[string]any)
+	ses.key = ""
+	ses.data = make(map[string]any)
 	return nil
 }
 
-func (this hSession) Save() error {
-	if this.key == "" {
+func (ses hSession) Save() error {
+	if ses.key == "" {
 		return nil
 	}
 
-	data, err := json.Marshal(this.data)
+	data, err := json.Marshal(ses.data)
 	if err != nil {
-		return this.err(err.Error())
+		return ses.err(err.Error())
 	}
 
-	exists, err := this.cache.Set(this.id(), string(data))
+	exists, err := ses.cache.Set(ses.id(), string(data))
 	if err != nil {
-		return this.err(err.Error())
+		return ses.err(err.Error())
 	}
 
 	if !exists {
-		exp := this.expiration
+		exp := ses.expiration
 		if exp <= 0 {
 			exp = 24 * time.Hour
 		}
 
-		err = this.cache.Put(this.id(), string(data), exp)
+		err = ses.cache.Put(ses.id(), string(data), exp)
 		if err != nil {
-			return this.err(err.Error())
+			return ses.err(err.Error())
 		}
 	}
 	return nil
